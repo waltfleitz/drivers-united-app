@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+from datetime import date
 
 st.set_page_config(page_title="Drivers United", layout="wide")
 
@@ -48,7 +49,7 @@ st.title(f"🚛 Drivers United — {driver}")
 tab1, tab2, tab3, tab4 = st.tabs(["📦 Loads", "⛽ Expenses", "🧾 Invoice", "📊 Dashboard"])
 
 # =======================
-# LOADS TAB (UPDATED)
+# LOADS TAB (FULL EDITABLE)
 # =======================
 with tab1:
     st.subheader("Add Load")
@@ -56,23 +57,35 @@ with tab1:
     col1, col2 = st.columns(2)
 
     with col1:
+        load_date = st.date_input("Date", value=date.today())
+
+        pickup_business = st.text_input("Pickup Business")
         pickup_city = st.text_input("Pickup City")
-        pickup_business = st.text_input("Pickup Business Name")
-        miles = st.number_input("Miles", min_value=0)
+        pickup_state = st.text_input("Pickup State")
+        pickup_zip = st.text_input("Pickup ZIP")
 
     with col2:
+        drop_business = st.text_input("Drop Business")
         drop_city = st.text_input("Drop City")
-        drop_business = st.text_input("Drop Business Name")
+        drop_state = st.text_input("Drop State")
+        drop_zip = st.text_input("Drop ZIP")
+
+        miles = st.number_input("Miles", min_value=0)
         rate = st.number_input("Rate", min_value=0)
 
     if st.button("Add Load"):
         cpm = round(rate / miles, 2) if miles > 0 else 0
 
         db[driver]["loads"].append({
-            "Pickup City": pickup_city,
+            "Date": str(load_date),
             "Pickup Business": pickup_business,
-            "Drop City": drop_city,
+            "Pickup City": pickup_city,
+            "Pickup State": pickup_state,
+            "Pickup ZIP": pickup_zip,
             "Drop Business": drop_business,
+            "Drop City": drop_city,
+            "Drop State": drop_state,
+            "Drop ZIP": drop_zip,
             "Miles": miles,
             "Rate": rate,
             "CPM": cpm,
@@ -81,32 +94,66 @@ with tab1:
         save_db()
         st.success("Load saved!")
 
-    st.subheader("Your Loads")
+    st.subheader("Edit Loads")
 
-    loads_df = pd.DataFrame(db[driver]["loads"])
+    if db[driver]["loads"]:
+        for i, load in enumerate(db[driver]["loads"]):
+            st.markdown("---")
 
-    if not loads_df.empty:
-        for i in range(len(loads_df)):
-            colA, colB = st.columns([4,2])
+            col1, col2 = st.columns(2)
 
-            colA.write(
-                f"{loads_df.loc[i,'Pickup Business']} ({loads_df.loc[i,'Pickup City']}) → "
-                f"{loads_df.loc[i,'Drop Business']} ({loads_df.loc[i,'Drop City']}) | "
-                f"${loads_df.loc[i,'Rate']}"
-            )
+            with col1:
+                new_date = col1.text_input("Date", value=load["Date"], key=f"d_{i}")
 
-            status = colB.selectbox(
-                "Status",
-                ["Booked","In Transit","Delivered","Paid"],
-                index=["Booked","In Transit","Delivered","Paid"].index(loads_df.loc[i,"Status"]),
-                key=f"{driver}_status_{i}"
-            )
+                new_pb = col1.text_input("Pickup Business", value=load["Pickup Business"], key=f"pb_{i}")
+                new_pc = col1.text_input("Pickup City", value=load["Pickup City"], key=f"pc_{i}")
+                new_ps = col1.text_input("Pickup State", value=load["Pickup State"], key=f"ps_{i}")
+                new_pz = col1.text_input("Pickup ZIP", value=load["Pickup ZIP"], key=f"pz_{i}")
 
-            db[driver]["loads"][i]["Status"] = status
-            save_db()
+            with col2:
+                new_db = col2.text_input("Drop Business", value=load["Drop Business"], key=f"db_{i}")
+                new_dc = col2.text_input("Drop City", value=load["Drop City"], key=f"dc_{i}")
+                new_ds = col2.text_input("Drop State", value=load["Drop State"], key=f"ds_{i}")
+                new_dz = col2.text_input("Drop ZIP", value=load["Drop ZIP"], key=f"dz_{i}")
+
+                new_miles = col2.number_input("Miles", value=int(load["Miles"]), key=f"m_{i}")
+                new_rate = col2.number_input("Rate", value=int(load["Rate"]), key=f"r_{i}")
+
+                status = col2.selectbox(
+                    "Status",
+                    ["Booked","In Transit","Delivered","Paid"],
+                    index=["Booked","In Transit","Delivered","Paid"].index(load["Status"]),
+                    key=f"s_{i}"
+                )
+
+            if st.button("❌ Delete Load", key=f"del_{i}"):
+                db[driver]["loads"].pop(i)
+                save_db()
+                st.rerun()
+
+            # Auto-save changes
+            updated = {
+                "Date": new_date,
+                "Pickup Business": new_pb,
+                "Pickup City": new_pc,
+                "Pickup State": new_ps,
+                "Pickup ZIP": new_pz,
+                "Drop Business": new_db,
+                "Drop City": new_dc,
+                "Drop State": new_ds,
+                "Drop ZIP": new_dz,
+                "Miles": new_miles,
+                "Rate": new_rate,
+                "CPM": round(new_rate / new_miles, 2) if new_miles > 0 else 0,
+                "Status": status
+            }
+
+            if updated != load:
+                db[driver]["loads"][i] = updated
+                save_db()
 
 # =======================
-# EXPENSES TAB
+# EXPENSES TAB (UNCHANGED)
 # =======================
 with tab2:
     st.subheader("Add Expense")
@@ -141,34 +188,23 @@ with tab2:
                 "Category",
                 ["Fuel","Repair","Toll","Insurance","Other"],
                 index=["Fuel","Repair","Toll","Insurance","Other"].index(exp["Category"]),
-                key=f"{driver}_cat_{i}"
+                key=f"cat_{i}"
             )
 
-            new_amt = colB.number_input(
-                "Amount",
-                value=int(exp["Amount"]),
-                key=f"{driver}_amt_{i}"
-            )
+            new_amt = colB.number_input("Amount", value=int(exp["Amount"]), key=f"amt_{i}")
+            new_notes = colC.text_input("Notes", value=exp.get("Notes",""), key=f"note_{i}")
 
-            new_notes = colC.text_input(
-                "Notes",
-                value=exp.get("Notes", ""),
-                key=f"{driver}_notes_{i}"
-            )
-
-            if colD.button("❌", key=f"{driver}_del_{i}"):
+            if colD.button("❌", key=f"expdel_{i}"):
                 db[driver]["expenses"].pop(i)
                 save_db()
                 st.rerun()
 
-            if (
-                new_cat != exp["Category"] or
-                new_amt != exp["Amount"] or
-                new_notes != exp.get("Notes", "")
-            ):
-                db[driver]["expenses"][i]["Category"] = new_cat
-                db[driver]["expenses"][i]["Amount"] = new_amt
-                db[driver]["expenses"][i]["Notes"] = new_notes
+            if (new_cat != exp["Category"] or new_amt != exp["Amount"] or new_notes != exp.get("Notes","")):
+                db[driver]["expenses"][i] = {
+                    "Category": new_cat,
+                    "Amount": new_amt,
+                    "Notes": new_notes
+                }
                 save_db()
 
 # =======================
@@ -185,24 +221,34 @@ with tab3:
         selected = loads_df.loc[idx]
 
         st.write("### Invoice Preview")
-        st.write(f"Pickup: {selected['Pickup Business']} ({selected['Pickup City']})")
-        st.write(f"Drop: {selected['Drop Business']} ({selected['Drop City']})")
+
+        st.write(f"Pickup: {selected['Pickup Business']} ({selected['Pickup City']}, {selected['Pickup State']} {selected['Pickup ZIP']})")
+        st.write(f"Drop: {selected['Drop Business']} ({selected['Drop City']}, {selected['Drop State']} {selected['Drop ZIP']})")
         st.write(f"Rate: ${selected['Rate']}")
+
+        file_name = f"{selected['Pickup Business']}_to_{selected['Drop Business']}.txt"
 
         invoice_text = f"""
 DRIVERS UNITED INVOICE
 
 Driver: {driver}
+Date: {selected['Date']}
 
-Pickup: {selected['Pickup Business']} ({selected['Pickup City']})
-Drop: {selected['Drop Business']} ({selected['Drop City']})
+Pickup:
+{selected['Pickup Business']}
+{selected['Pickup City']}, {selected['Pickup State']} {selected['Pickup ZIP']}
+
+Drop:
+{selected['Drop Business']}
+{selected['Drop City']}, {selected['Drop State']} {selected['Drop ZIP']}
+
 Rate: ${selected['Rate']}
 """
 
         st.download_button(
             label="Download Invoice",
             data=invoice_text,
-            file_name="invoice.txt"
+            file_name=file_name
         )
 
 # =======================
