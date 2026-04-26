@@ -1,22 +1,35 @@
 import streamlit as st
 import pandas as pd
+import os
 
 st.set_page_config(page_title="Drivers United", layout="wide")
 
 st.title("🚛 Drivers United Dashboard")
 
-# -----------------------
-# SESSION STATE STORAGE
-# -----------------------
-if "loads" not in st.session_state:
-    st.session_state.loads = pd.DataFrame(columns=[
-        "Pickup", "Drop", "Miles", "Rate", "CPM", "Status"
-    ])
+DATA_FILE = "data.csv"
+EXPENSE_FILE = "expenses.csv"
 
-if "expenses" not in st.session_state:
-    st.session_state.expenses = pd.DataFrame(columns=[
-        "Category", "Amount"
-    ])
+# -----------------------
+# LOAD DATA
+# -----------------------
+if os.path.exists(DATA_FILE):
+    loads = pd.read_csv(DATA_FILE)
+else:
+    loads = pd.DataFrame(columns=["Pickup","Drop","Miles","Rate","CPM","Status"])
+
+if os.path.exists(EXPENSE_FILE):
+    expenses = pd.read_csv(EXPENSE_FILE)
+else:
+    expenses = pd.DataFrame(columns=["Category","Amount"])
+
+# -----------------------
+# SAVE FUNCTIONS
+# -----------------------
+def save_loads():
+    loads.to_csv(DATA_FILE, index=False)
+
+def save_expenses():
+    expenses.to_csv(EXPENSE_FILE, index=False)
 
 # -----------------------
 # ADD LOAD
@@ -34,10 +47,7 @@ with col2:
     rate = st.number_input("Rate ($)", min_value=0)
 
 if st.button("Add Load"):
-    if miles > 0:
-        cpm = round(rate / miles, 2)
-    else:
-        cpm = 0
+    cpm = round(rate / miles, 2) if miles > 0 else 0
 
     new_row = pd.DataFrame([{
         "Pickup": pickup,
@@ -48,19 +58,60 @@ if st.button("Add Load"):
         "Status": "Booked"
     }])
 
-    st.session_state.loads = pd.concat(
-        [st.session_state.loads, new_row],
-        ignore_index=True
-    )
-
-    st.success("Load added!")
+    loads = pd.concat([loads, new_row], ignore_index=True)
+    save_loads()
+    st.success("Load saved!")
 
 # -----------------------
 # LOAD TABLE
 # -----------------------
-st.header("📦 Active Loads")
+st.header("📦 Loads")
 
-st.dataframe(st.session_state.loads, use_container_width=True)
+if not loads.empty:
+    for i in range(len(loads)):
+        colA, colB, colC = st.columns([4,2,2])
+
+        colA.write(f"{loads.loc[i,'Pickup']} → {loads.loc[i,'Drop']} | ${loads.loc[i,'Rate']}")
+
+        status = colB.selectbox(
+            "Status",
+            ["Booked","In Transit","Delivered","Paid"],
+            index=["Booked","In Transit","Delivered","Paid"].index(loads.loc[i,"Status"]),
+            key=f"status_{i}"
+        )
+
+        if status != loads.loc[i,"Status"]:
+            loads.loc[i,"Status"] = status
+            save_loads()
+
+# -----------------------
+# INVOICE GENERATOR
+# -----------------------
+st.header("🧾 Generate Invoice")
+
+if not loads.empty:
+    load_choice = st.selectbox("Select Load", loads.index)
+
+    selected = loads.loc[load_choice]
+
+    st.write("### Invoice Preview")
+    st.write(f"Pickup: {selected['Pickup']}")
+    st.write(f"Drop: {selected['Drop']}")
+    st.write(f"Rate: ${selected['Rate']}")
+
+    invoice_text = f"""
+    DRIVERS UNITED INVOICE
+
+    Pickup: {selected['Pickup']}
+    Drop: {selected['Drop']}
+    Rate: ${selected['Rate']}
+    """
+
+    st.download_button(
+        label="Download Invoice",
+        data=invoice_text,
+        file_name="invoice.txt"
+    )
 
 # -----------------------
 # ADD EXPENSE
@@ -70,7 +121,7 @@ st.header("⛽ Add Expense")
 col3, col4 = st.columns(2)
 
 with col3:
-    category = st.selectbox("Category", ["Fuel", "Repair", "Toll", "Other"])
+    category = st.selectbox("Category", ["Fuel","Repair","Toll","Other"])
 
 with col4:
     amount = st.number_input("Amount ($)", min_value=0)
@@ -81,32 +132,26 @@ if st.button("Add Expense"):
         "Amount": amount
     }])
 
-    st.session_state.expenses = pd.concat(
-        [st.session_state.expenses, new_expense],
-        ignore_index=True
-    )
-
-    st.success("Expense added!")
+    expenses = pd.concat([expenses, new_expense], ignore_index=True)
+    save_expenses()
+    st.success("Expense saved!")
 
 # -----------------------
 # EXPENSE TABLE
 # -----------------------
 st.header("💸 Expenses")
 
-st.dataframe(st.session_state.expenses, use_container_width=True)
+st.dataframe(expenses, use_container_width=True)
 
 # -----------------------
-# DASHBOARD METRICS
+# DASHBOARD
 # -----------------------
 st.header("📊 Summary")
 
-total_revenue = st.session_state.loads["Rate"].sum()
-total_expense = st.session_state.expenses["Amount"].sum()
+total_revenue = loads["Rate"].sum()
+total_expense = expenses["Amount"].sum()
 profit = total_revenue - total_expense
-
-avg_cpm = 0
-if not st.session_state.loads.empty:
-    avg_cpm = round(st.session_state.loads["CPM"].mean(), 2)
+avg_cpm = round(loads["CPM"].mean(),2) if not loads.empty else 0
 
 colA, colB, colC, colD = st.columns(4)
 
