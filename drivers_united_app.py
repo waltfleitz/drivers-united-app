@@ -1,161 +1,227 @@
 import streamlit as st
 import pandas as pd
+import json
 import os
 
 st.set_page_config(page_title="Drivers United", layout="wide")
 
-st.title("🚛 Drivers United Dashboard")
-
-DATA_FILE = "data.csv"
-EXPENSE_FILE = "expenses.csv"
+DATA_FILE = "database.json"
 
 # -----------------------
-# LOAD DATA
+# LOAD DATABASE
 # -----------------------
 if os.path.exists(DATA_FILE):
-    loads = pd.read_csv(DATA_FILE)
+    with open(DATA_FILE, "r") as f:
+        db = json.load(f)
 else:
-    loads = pd.DataFrame(columns=["Pickup","Drop","Miles","Rate","CPM","Status"])
+    db = {}
 
-if os.path.exists(EXPENSE_FILE):
-    expenses = pd.read_csv(EXPENSE_FILE)
-else:
-    expenses = pd.DataFrame(columns=["Category","Amount"])
-
-# -----------------------
-# SAVE FUNCTIONS
-# -----------------------
-def save_loads():
-    loads.to_csv(DATA_FILE, index=False)
-
-def save_expenses():
-    expenses.to_csv(EXPENSE_FILE, index=False)
+def save_db():
+    with open(DATA_FILE, "w") as f:
+        json.dump(db, f, indent=2)
 
 # -----------------------
-# ADD LOAD
+# DRIVER LOGIN
 # -----------------------
-st.header("➕ Add Load")
+st.sidebar.title("Driver Login")
 
-col1, col2 = st.columns(2)
+driver = st.sidebar.text_input("Enter Driver Name")
 
-with col1:
-    pickup = st.text_input("Pickup City")
-    miles = st.number_input("Miles", min_value=0)
+if not driver:
+    st.warning("Enter your name to begin")
+    st.stop()
 
-with col2:
-    drop = st.text_input("Drop City")
-    rate = st.number_input("Rate ($)", min_value=0)
+if driver not in db:
+    db[driver] = {
+        "loads": [],
+        "expenses": []
+    }
+    save_db()
 
-if st.button("Add Load"):
-    cpm = round(rate / miles, 2) if miles > 0 else 0
+st.sidebar.success(f"Logged in as {driver}")
 
-    new_row = pd.DataFrame([{
-        "Pickup": pickup,
-        "Drop": drop,
-        "Miles": miles,
-        "Rate": rate,
-        "CPM": cpm,
-        "Status": "Booked"
-    }])
-
-    loads = pd.concat([loads, new_row], ignore_index=True)
-    save_loads()
-    st.success("Load saved!")
+st.title(f"🚛 Drivers United — {driver}")
 
 # -----------------------
-# LOAD TABLE
+# TABS
 # -----------------------
-st.header("📦 Loads")
+tab1, tab2, tab3, tab4 = st.tabs(["📦 Loads", "⛽ Expenses", "🧾 Invoice", "📊 Dashboard"])
 
-if not loads.empty:
-    for i in range(len(loads)):
-        colA, colB, colC = st.columns([4,2,2])
+# =======================
+# LOADS TAB (UPDATED)
+# =======================
+with tab1:
+    st.subheader("Add Load")
 
-        colA.write(f"{loads.loc[i,'Pickup']} → {loads.loc[i,'Drop']} | ${loads.loc[i,'Rate']}")
+    col1, col2 = st.columns(2)
 
-        status = colB.selectbox(
-            "Status",
-            ["Booked","In Transit","Delivered","Paid"],
-            index=["Booked","In Transit","Delivered","Paid"].index(loads.loc[i,"Status"]),
-            key=f"status_{i}"
+    with col1:
+        pickup_city = st.text_input("Pickup City")
+        pickup_business = st.text_input("Pickup Business Name")
+        miles = st.number_input("Miles", min_value=0)
+
+    with col2:
+        drop_city = st.text_input("Drop City")
+        drop_business = st.text_input("Drop Business Name")
+        rate = st.number_input("Rate", min_value=0)
+
+    if st.button("Add Load"):
+        cpm = round(rate / miles, 2) if miles > 0 else 0
+
+        db[driver]["loads"].append({
+            "Pickup City": pickup_city,
+            "Pickup Business": pickup_business,
+            "Drop City": drop_city,
+            "Drop Business": drop_business,
+            "Miles": miles,
+            "Rate": rate,
+            "CPM": cpm,
+            "Status": "Booked"
+        })
+        save_db()
+        st.success("Load saved!")
+
+    st.subheader("Your Loads")
+
+    loads_df = pd.DataFrame(db[driver]["loads"])
+
+    if not loads_df.empty:
+        for i in range(len(loads_df)):
+            colA, colB = st.columns([4,2])
+
+            colA.write(
+                f"{loads_df.loc[i,'Pickup Business']} ({loads_df.loc[i,'Pickup City']}) → "
+                f"{loads_df.loc[i,'Drop Business']} ({loads_df.loc[i,'Drop City']}) | "
+                f"${loads_df.loc[i,'Rate']}"
+            )
+
+            status = colB.selectbox(
+                "Status",
+                ["Booked","In Transit","Delivered","Paid"],
+                index=["Booked","In Transit","Delivered","Paid"].index(loads_df.loc[i,"Status"]),
+                key=f"{driver}_status_{i}"
+            )
+
+            db[driver]["loads"][i]["Status"] = status
+            save_db()
+
+# =======================
+# EXPENSES TAB
+# =======================
+with tab2:
+    st.subheader("Add Expense")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        category = st.selectbox("Category", ["Fuel","Repair","Toll","Insurance","Other"])
+
+    with col2:
+        amount = st.number_input("Amount", min_value=0)
+
+    with col3:
+        notes = st.text_input("Notes")
+
+    if st.button("Add Expense"):
+        db[driver]["expenses"].append({
+            "Category": category,
+            "Amount": amount,
+            "Notes": notes
+        })
+        save_db()
+        st.success("Expense saved!")
+
+    st.subheader("Edit Expenses")
+
+    if db[driver]["expenses"]:
+        for i, exp in enumerate(db[driver]["expenses"]):
+            colA, colB, colC, colD = st.columns([2,2,3,1])
+
+            new_cat = colA.selectbox(
+                "Category",
+                ["Fuel","Repair","Toll","Insurance","Other"],
+                index=["Fuel","Repair","Toll","Insurance","Other"].index(exp["Category"]),
+                key=f"{driver}_cat_{i}"
+            )
+
+            new_amt = colB.number_input(
+                "Amount",
+                value=int(exp["Amount"]),
+                key=f"{driver}_amt_{i}"
+            )
+
+            new_notes = colC.text_input(
+                "Notes",
+                value=exp.get("Notes", ""),
+                key=f"{driver}_notes_{i}"
+            )
+
+            if colD.button("❌", key=f"{driver}_del_{i}"):
+                db[driver]["expenses"].pop(i)
+                save_db()
+                st.rerun()
+
+            if (
+                new_cat != exp["Category"] or
+                new_amt != exp["Amount"] or
+                new_notes != exp.get("Notes", "")
+            ):
+                db[driver]["expenses"][i]["Category"] = new_cat
+                db[driver]["expenses"][i]["Amount"] = new_amt
+                db[driver]["expenses"][i]["Notes"] = new_notes
+                save_db()
+
+# =======================
+# INVOICE TAB (UPDATED)
+# =======================
+with tab3:
+    st.subheader("Generate Invoice")
+
+    loads_df = pd.DataFrame(db[driver]["loads"])
+
+    if not loads_df.empty:
+        idx = st.selectbox("Select Load", loads_df.index)
+
+        selected = loads_df.loc[idx]
+
+        st.write("### Invoice Preview")
+        st.write(f"Pickup: {selected['Pickup Business']} ({selected['Pickup City']})")
+        st.write(f"Drop: {selected['Drop Business']} ({selected['Drop City']})")
+        st.write(f"Rate: ${selected['Rate']}")
+
+        invoice_text = f"""
+DRIVERS UNITED INVOICE
+
+Driver: {driver}
+
+Pickup: {selected['Pickup Business']} ({selected['Pickup City']})
+Drop: {selected['Drop Business']} ({selected['Drop City']})
+Rate: ${selected['Rate']}
+"""
+
+        st.download_button(
+            label="Download Invoice",
+            data=invoice_text,
+            file_name="invoice.txt"
         )
 
-        if status != loads.loc[i,"Status"]:
-            loads.loc[i,"Status"] = status
-            save_loads()
+# =======================
+# DASHBOARD TAB
+# =======================
+with tab4:
+    st.subheader("Summary")
 
-# -----------------------
-# INVOICE GENERATOR
-# -----------------------
-st.header("🧾 Generate Invoice")
+    loads_df = pd.DataFrame(db[driver]["loads"])
+    expenses_df = pd.DataFrame(db[driver]["expenses"])
 
-if not loads.empty:
-    load_choice = st.selectbox("Select Load", loads.index)
+    total_revenue = loads_df["Rate"].sum() if not loads_df.empty else 0
+    total_expense = expenses_df["Amount"].sum() if not expenses_df.empty else 0
+    profit = total_revenue - total_expense
+    avg_cpm = round(loads_df["CPM"].mean(), 2) if not loads_df.empty else 0
 
-    selected = loads.loc[load_choice]
+    col1, col2, col3, col4 = st.columns(4)
 
-    st.write("### Invoice Preview")
-    st.write(f"Pickup: {selected['Pickup']}")
-    st.write(f"Drop: {selected['Drop']}")
-    st.write(f"Rate: ${selected['Rate']}")
-
-    invoice_text = f"""
-    DRIVERS UNITED INVOICE
-
-    Pickup: {selected['Pickup']}
-    Drop: {selected['Drop']}
-    Rate: ${selected['Rate']}
-    """
-
-    st.download_button(
-        label="Download Invoice",
-        data=invoice_text,
-        file_name="invoice.txt"
-    )
-
-# -----------------------
-# ADD EXPENSE
-# -----------------------
-st.header("⛽ Add Expense")
-
-col3, col4 = st.columns(2)
-
-with col3:
-    category = st.selectbox("Category", ["Fuel","Repair","Toll","Other"])
-
-with col4:
-    amount = st.number_input("Amount ($)", min_value=0)
-
-if st.button("Add Expense"):
-    new_expense = pd.DataFrame([{
-        "Category": category,
-        "Amount": amount
-    }])
-
-    expenses = pd.concat([expenses, new_expense], ignore_index=True)
-    save_expenses()
-    st.success("Expense saved!")
-
-# -----------------------
-# EXPENSE TABLE
-# -----------------------
-st.header("💸 Expenses")
-
-st.dataframe(expenses, use_container_width=True)
-
-# -----------------------
-# DASHBOARD
-# -----------------------
-st.header("📊 Summary")
-
-total_revenue = loads["Rate"].sum()
-total_expense = expenses["Amount"].sum()
-profit = total_revenue - total_expense
-avg_cpm = round(loads["CPM"].mean(),2) if not loads.empty else 0
-
-colA, colB, colC, colD = st.columns(4)
-
-colA.metric("Revenue", f"${total_revenue}")
-colB.metric("Expenses", f"${total_expense}")
-colC.metric("Profit", f"${profit}")
-colD.metric("Avg CPM", avg_cpm)
+    col1.metric("Revenue", f"${total_revenue}")
+    col2.metric("Expenses", f"${total_expense}")
+    col3.metric("Profit", f"${profit}")
+    col4.metric("Avg CPM", avg_cpm)
