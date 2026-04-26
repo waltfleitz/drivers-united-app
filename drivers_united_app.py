@@ -4,7 +4,7 @@ import json
 import os
 from datetime import date, datetime
 
-st.set_page_config(page_title="Drivers United", layout="wide")
+st.set_page_config(page_title="ARISE Distribution", layout="wide")
 
 DATA_FILE = "database.json"
 
@@ -21,33 +21,41 @@ def save_db():
     with open(DATA_FILE, "w") as f:
         json.dump(db, f, indent=2)
 
-# -----------------------
-# SAFE GET (prevents crashes)
-# -----------------------
 def safe_get(d, key, default=""):
     return d[key] if key in d else default
+
+# -----------------------
+# BRAND HEADER
+# -----------------------
+st.markdown("""
+# 🚛 ARISE Distribution
+### Hotshot Trucking — Fast. Reliable. On Time.
+""")
+
+st.markdown("---")
 
 # -----------------------
 # DRIVER LOGIN
 # -----------------------
 st.sidebar.title("Driver Login")
 
-driver = st.sidebar.text_input("Enter Driver Name")
+driver = st.sidebar.text_input("Driver Name", value="Joshua Smith")
 
 if not driver:
-    st.warning("Enter your name to begin")
+    st.warning("Enter your name")
     st.stop()
 
 if driver not in db:
-    db[driver] = {
-        "loads": [],
-        "expenses": []
-    }
+    db[driver] = {"loads": [], "expenses": []}
     save_db()
 
-st.sidebar.success(f"Logged in as {driver}")
+# Sidebar Contact Info
+st.sidebar.markdown("### Driver Info")
+st.sidebar.write("📞 502-396-6192")
+st.sidebar.write("📍 Borden, Indiana")
+st.sidebar.write("✉️ arisedistribution26@gmail.com")
 
-st.title(f"🚛 Drivers United — {driver}")
+st.sidebar.success(f"Logged in as {driver}")
 
 # -----------------------
 # TABS
@@ -76,8 +84,8 @@ with tab1:
         drop_zip = st.text_input("Drop ZIP")
 
         miles = st.number_input("Miles", min_value=0)
-        rate = st.number_input("Rate", min_value=0)
-        cost = st.number_input("Cost (what you pay driver)", min_value=0)
+        rate = st.number_input("Customer Rate", min_value=0)
+        cost = st.number_input("Driver Cost", min_value=0)
 
     if st.button("Add Load"):
         cpm = round(rate / miles, 2) if miles > 0 else 0
@@ -104,84 +112,64 @@ with tab1:
         save_db()
         st.success("Load saved!")
 
-    st.subheader("Edit Loads")
+    st.subheader("Active Loads")
 
     for i, load in enumerate(db[driver]["loads"]):
         st.markdown("---")
 
-        col1, col2 = st.columns(2)
+        st.markdown(f"""
+**{safe_get(load,'Pickup Business')} ({safe_get(load,'Pickup City')}, {safe_get(load,'Pickup State')} {safe_get(load,'Pickup ZIP')})**  
+➡️  
+**{safe_get(load,'Drop Business')} ({safe_get(load,'Drop City')}, {safe_get(load,'Drop State')} {safe_get(load,'Drop ZIP')})**
+""")
 
-        with col1:
-            new_date = col1.text_input("Date", value=safe_get(load,"Date"), key=f"d_{i}")
-            new_pb = col1.text_input("Pickup Business", value=safe_get(load,"Pickup Business"), key=f"pb_{i}")
-            new_pc = col1.text_input("Pickup City", value=safe_get(load,"Pickup City"), key=f"pc_{i}")
-            new_ps = col1.text_input("Pickup State", value=safe_get(load,"Pickup State"), key=f"ps_{i}")
-            new_pz = col1.text_input("Pickup ZIP", value=safe_get(load,"Pickup ZIP"), key=f"pz_{i}")
+        col1, col2, col3 = st.columns(3)
 
-        with col2:
-            new_db = col2.text_input("Drop Business", value=safe_get(load,"Drop Business"), key=f"db_{i}")
-            new_dc = col2.text_input("Drop City", value=safe_get(load,"Drop City"), key=f"dc_{i}")
-            new_ds = col2.text_input("Drop State", value=safe_get(load,"Drop State"), key=f"ds_{i}")
-            new_dz = col2.text_input("Drop ZIP", value=safe_get(load,"Drop ZIP"), key=f"dz_{i}")
+        new_rate = col1.number_input("Rate", value=int(safe_get(load,"Rate",0)), key=f"r_{i}")
+        new_cost = col2.number_input("Cost", value=int(safe_get(load,"Cost",0)), key=f"c_{i}")
 
-            new_miles = col2.number_input("Miles", value=int(safe_get(load,"Miles",0)), key=f"m_{i}")
-            new_rate = col2.number_input("Rate", value=int(safe_get(load,"Rate",0)), key=f"r_{i}")
-            new_cost = col2.number_input("Cost", value=int(safe_get(load,"Cost",0)), key=f"c_{i}")
+        status = col3.selectbox(
+            "Status",
+            ["Booked","In Transit","Delivered","Paid"],
+            index=["Booked","In Transit","Delivered","Paid"].index(safe_get(load,"Status","Booked")),
+            key=f"s_{i}"
+        )
 
-            status = col2.selectbox(
-                "Status",
-                ["Booked","In Transit","Delivered","Paid"],
-                index=["Booked","In Transit","Delivered","Paid"].index(safe_get(load,"Status","Booked")),
-                key=f"s_{i}"
-            )
-
-            paid = col2.selectbox(
-                "Paid",
-                ["No","Yes"],
-                index=["No","Yes"].index(safe_get(load,"Paid","No")),
-                key=f"paid_{i}"
-            )
-
-        if st.button("❌ Delete Load", key=f"del_{i}"):
-            db[driver]["loads"].pop(i)
-            save_db()
-            st.rerun()
+        paid = col3.selectbox(
+            "Paid",
+            ["No","Yes"],
+            index=["No","Yes"].index(safe_get(load,"Paid","No")),
+            key=f"p_{i}"
+        )
 
         profit = new_rate - new_cost
 
-        updated = {
-            "Date": new_date,
-            "Pickup Business": new_pb,
-            "Pickup City": new_pc,
-            "Pickup State": new_ps,
-            "Pickup ZIP": new_pz,
-            "Drop Business": new_db,
-            "Drop City": new_dc,
-            "Drop State": new_ds,
-            "Drop ZIP": new_dz,
-            "Miles": new_miles,
-            "Rate": new_rate,
-            "Cost": new_cost,
-            "Profit": profit,
-            "CPM": round(new_rate / new_miles, 2) if new_miles > 0 else 0,
-            "Status": status,
-            "Paid": paid
-        }
+        db[driver]["loads"][i]["Rate"] = new_rate
+        db[driver]["loads"][i]["Cost"] = new_cost
+        db[driver]["loads"][i]["Profit"] = profit
+        db[driver]["loads"][i]["Status"] = status
+        db[driver]["loads"][i]["Paid"] = paid
 
-        db[driver]["loads"][i] = updated
         save_db()
 
 # =======================
-# EXPENSES TAB
+# EXPENSES
 # =======================
 with tab2:
     st.subheader("Expenses")
 
-    expenses_df = pd.DataFrame(db[driver]["expenses"])
-    st.dataframe(expenses_df)
+    category = st.selectbox("Category", ["Fuel","Repair","Toll","Insurance","Other"])
+    amount = st.number_input("Amount", min_value=0)
+
+    if st.button("Add Expense"):
+        db[driver]["expenses"].append({"Category": category, "Amount": amount})
+        save_db()
+        st.success("Expense added")
+
+    st.dataframe(pd.DataFrame(db[driver]["expenses"]))
 
 # =======================
-# INVOICE TAB
+# INVOICE
 # =======================
 with tab3:
     st.subheader("Invoice")
@@ -192,50 +180,61 @@ with tab3:
         idx = st.selectbox("Select Load", loads_df.index)
         selected = loads_df.loc[idx]
 
-        st.write(f"{selected['Pickup Business']} → {selected['Drop Business']}")
+        st.write(f"### {selected['Pickup Business']} ➝ {selected['Drop Business']}")
         st.write(f"Rate: ${selected['Rate']}")
 
-        st.download_button(
-            "Download Invoice",
-            data=str(selected),
-            file_name=f"{selected['Pickup Business']}_to_{selected['Drop Business']}.txt"
-        )
+        invoice = f"""
+ARISE DISTRIBUTION
+Hotshot Trucking
+
+Driver: {driver}
+Date: {selected['Date']}
+
+Pickup:
+{selected['Pickup Business']}
+{selected['Pickup City']}, {selected['Pickup State']} {selected['Pickup ZIP']}
+
+Drop:
+{selected['Drop Business']}
+{selected['Drop City']}, {selected['Drop State']} {selected['Drop ZIP']}
+
+Total: ${selected['Rate']}
+"""
+
+        st.download_button("Download Invoice", invoice,
+            file_name=f"{selected['Pickup Business']}_to_{selected['Drop Business']}.txt")
 
 # =======================
-# DASHBOARD TAB
+# DASHBOARD
 # =======================
 with tab4:
-    st.subheader("Dashboard")
+    st.subheader("Business Overview")
 
     loads_df = pd.DataFrame(db[driver]["loads"])
 
     if not loads_df.empty:
-        total_revenue = loads_df["Rate"].sum()
-        total_cost = loads_df["Cost"].sum()
-        total_profit = loads_df["Profit"].sum()
+        revenue = loads_df["Rate"].sum()
+        cost = loads_df["Cost"].sum()
+        profit = loads_df["Profit"].sum()
 
         col1, col2, col3 = st.columns(3)
-        col1.metric("Revenue", f"${total_revenue}")
-        col2.metric("Cost", f"${total_cost}")
-        col3.metric("Profit", f"${total_profit}")
+
+        col1.metric("Revenue", f"${revenue}")
+        col2.metric("Cost", f"${cost}")
+        col3.metric("Profit", f"${profit}")
 
         # Aging
-        st.subheader("Aging")
-
         today = datetime.today()
 
-        def aging_bucket(d):
+        def aging(d):
             try:
                 days = (today - datetime.strptime(d, "%Y-%m-%d")).days
-                if days <= 30:
-                    return "0-30"
-                elif days <= 60:
-                    return "31-60"
-                else:
-                    return "60+"
+                if days <= 30: return "0-30"
+                elif days <= 60: return "31-60"
+                else: return "60+"
             except:
                 return "Unknown"
 
-        loads_df["Aging"] = loads_df["Date"].apply(aging_bucket)
+        loads_df["Aging"] = loads_df["Date"].apply(aging)
 
         st.dataframe(loads_df[["Pickup Business","Drop Business","Rate","Paid","Aging"]])
